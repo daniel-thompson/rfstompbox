@@ -20,15 +20,15 @@
 
 /*
 Pin assignment:
-PB1 = key input (active low with pull-up)
-PB3 = analog input (ADC3)
-PB4 = LED output (active high)
+PB0 = key input (active low with pull-up)
+PB2 = analog input (ADC1)
+PB1 = LED output (active high)
 
-PB0, PB2 = USB data lines
+PB3, PB4 = USB data lines
 */
 
-#define BIT_LED 4
-#define BIT_KEY 1
+#define BIT_LED 1
+#define BIT_KEY 0
 
 
 #define UTIL_BIN4(x)        (uchar)((0##x & 01000)/64 + (0##x & 0100)/16 + (0##x & 010)/4 + (0##x & 1))
@@ -201,7 +201,7 @@ static void timerInit(void)
 
 static void adcInit(void)
 {
-    ADMUX = UTIL_BIN8(1001, 0011);  /* Vref=2.56V, measure ADC0 */
+    ADMUX = UTIL_BIN8(1001, 1111);  /* Vref=2.56V, measure ADC4 (temp sensor) */
     ADCSRA = UTIL_BIN8(1000, 0111); /* enable ADC, not free running, interrupt disable, rate = 1/128 */
 }
 

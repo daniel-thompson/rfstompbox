@@ -7,8 +7,10 @@
 # License: GPLv2.
 # This Revision: $Id: Makefile 362 2007-06-25 14:38:21Z cs $
 
-DEVICE=attiny45
-AVRDUDE = avrdude -c stk500v2 -P avrdoper -p $(DEVICE)
+DEVICE=attiny85
+AVRDUDE = avrdude -c usbtiny -p $(DEVICE)
+#DEVICE=attiny45
+#AVRDUDE = avrdude -c stk500v2 -P avrdoper -p $(DEVICE)
 # The two lines above are for "avrdude" and the STK500 programmer connected
 # to an USB to serial converter to a Mac running Mac OS X.
 # Choose your favorite programmer and interface.
@@ -82,3 +84,7 @@ disasm:	main.bin
 
 cpp:
 	$(COMPILE) -E main.c
+
+# This is very aggressive dependancy tracking but is sufficient since 
+# it only takes half a second to compile!
+$(OBJECTS) : usbconfig.h usbdrv/*.h Makefile
