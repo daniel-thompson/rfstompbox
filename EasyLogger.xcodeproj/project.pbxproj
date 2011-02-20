@@ -1,0 +1,87 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 42;
+	objects = {
+
+/* Begin PBXFileReference section */
+		40938AE10C2D583B00D1A230 /* checksize */ = {isa = PBXFileReference; fileEncoding = 5; lastKnownFileType = text.script.sh; path = checksize; sourceTree = "<group>"; };
+		40938AE20C2D583B00D1A230 /* main.c */ = {isa = PBXFileReference; fileEncoding = 5; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; };
+		40938AE30C2D583B00D1A230 /* Makefile */ = {isa = PBXFileReference; fileEncoding = 5; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
+		40938AF80C2D585900D1A230 /* usbdrv */ = {isa = PBXFileReference; lastKnownFileType = folder; path = usbdrv; sourceTree = "<group>"; };
+		40938B0D0C2D59DC00D1A230 /* usbconfig.h */ = {isa = PBXFileReference; fileEncoding = 5; lastKnownFileType = sourcecode.c.h; path = usbconfig.h; sourceTree = "<group>"; };
+		40938C430C30088200D1A230 /* Changelog.txt */ = {isa = PBXFileReference; fileEncoding = 5; lastKnownFileType = text; path = Changelog.txt; sourceTree = "<group>"; };
+		40938C440C30088200D1A230 /* mkdist.sh */ = {isa = PBXFileReference; fileEncoding = 5; lastKnownFileType = text.script.sh; path = mkdist.sh; sourceTree = "<group>"; };
+		40938C450C30088200D1A230 /* Readme.txt */ = {isa = PBXFileReference; fileEncoding = 5; lastKnownFileType = text; path = Readme.txt; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		40938AD20C2D57D100D1A230 = {
+			isa = PBXGroup;
+			children = (
+				40938C450C30088200D1A230 /* Readme.txt */,
+				40938C430C30088200D1A230 /* Changelog.txt */,
+				40938C440C30088200D1A230 /* mkdist.sh */,
+				40938AE00C2D583B00D1A230 /* firmware */,
+			);
+			sourceTree = "<group>";
+		};
+		40938AE00C2D583B00D1A230 /* firmware */ = {
+			isa = PBXGroup;
+			children = (
+				40938AE10C2D583B00D1A230 /* checksize */,
+				40938AE20C2D583B00D1A230 /* main.c */,
+				40938B0D0C2D59DC00D1A230 /* usbconfig.h */,
+				40938AE30C2D583B00D1A230 /* Makefile */,
+				40938AF80C2D585900D1A230 /* usbdrv */,
+			);
+			path = firmware;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXProject section */
+		40938AD40C2D57D100D1A230 /* Project object */ = {
+			isa = PBXProject;
+			buildConfigurationList = 40938AD50C2D57D100D1A230 /* Build configuration list for PBXProject "EasyLogger" */;
+			hasScannedForEncodings = 0;
+			mainGroup = 40938AD20C2D57D100D1A230;
+			projectDirPath = "";
+			targets = (
+			);
+		};
+/* End PBXProject section */
+
+/* Begin XCBuildConfiguration section */
+		40938AD60C2D57D100D1A230 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = Debug;
+		};
+		40938AD70C2D57D100D1A230 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = YES;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		40938AD50C2D57D100D1A230 /* Build configuration list for PBXProject "EasyLogger" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				40938AD60C2D57D100D1A230 /* Debug */,
+				40938AD70C2D57D100D1A230 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 40938AD40C2D57D100D1A230 /* Project object */;
+}

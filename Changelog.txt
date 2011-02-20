@@ -1,0 +1,18 @@
+This file documents changes in the software, firmware and hardware of the
+EasyLogger device. New entries are always appended to the end of the file.
+Scroll down to the bottom to see the most recent changes.
+
+* Release 2007-06-25
+
+- Use better EAGLE library object for ATTiny45 in circuit diagram. The
+  previous choice had two pins swapped.
+- Update to latest USB driver from 2007-07-07.
+
+* Release 2007-07-19
+
+- Auto-calibrate the RC oscillator from the USB frame clock.
+- Set ADC range to 2.56 V and print values in mV.
+- Update to latest USB driver.
+- Use usbDeviceConnect() and usbDeviceDisconnect().
+
+* Release 2008-02-28
