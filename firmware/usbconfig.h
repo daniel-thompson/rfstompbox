@@ -136,22 +136,73 @@ section at the end of this file).
  * usbFunctionSetup(). This saves a couple of bytes.
  */
 #define USB_CFG_IMPLEMENT_FN_WRITEOUT   0
-/* Define this to 1 if you want to use interrupt-out (or bulk out) endpoint 1.
+/* Define this to 1 if you want to use interrupt-out (or bulk out) endpoints.
  * You must implement the function usbFunctionWriteOut() which receives all
- * interrupt/bulk data sent to endpoint 1.
+ * interrupt/bulk data sent to any endpoint other than 0. The endpoint number
+ * can be found in 'usbRxToken'.
  */
 #define USB_CFG_HAVE_FLOWCONTROL        0
 /* Define this to 1 if you want flowcontrol over USB data. See the definition
  * of the macros usbDisableAllRequests() and usbEnableAllRequests() in
  * usbdrv.h.
  */
-#ifndef __ASSEMBLER__
-extern void usbEventResetReady(void);
-#endif
-#define USB_RESET_HOOK(isReset)             if(!isReset){usbEventResetReady();}
+#define USB_CFG_DRIVER_FLASH_PAGE       0
+/* If the device has more than 64 kBytes of flash, define this to the 64 k page
+ * where the driver's constants (descriptors) are located. Or in other words:
+ * Define this to 1 for boot loaders on the ATMega128.
+ */
+#define USB_CFG_LONG_TRANSFERS          0
+/* Define this to 1 if you want to send/receive blocks of more than 254 bytes
+ * in a single control-in or control-out transfer. Note that the capability
+ * for long transfers increases the driver size.
+ */
+/* #define USB_RX_USER_HOOK(data, len)     if(usbRxToken == (uchar)USBPID_SETUP) blinkLED(); */
+/* This macro is a hook if you want to do unconventional things. If it is
+ * defined, it's inserted at the beginning of received message processing.
+ * If you eat the received message and don't want default processing to
+ * proceed, do a return after doing your things. One possible application
+ * (besides debugging) is to flash a status LED on each packet.
+ */
+/* #define USB_RESET_HOOK(resetStarts)     if(!resetStarts){hadUsbReset();} */
 /* This macro is a hook if you need to know when an USB RESET occurs. It has
  * one parameter which distinguishes between the start of RESET state and its
  * end.
+ */
+/* #define USB_SET_ADDRESS_HOOK()              hadAddressAssigned(); */
+/* This macro (if defined) is executed when a USB SET_ADDRESS request was
+ * received.
+ */
+#define USB_COUNT_SOF                   0
+/* define this macro to 1 if you need the global variable "usbSofCount" which
+ * counts SOF packets. This feature requires that the hardware interrupt is
+ * connected to D- instead of D+.
+ */
+/* #ifdef __ASSEMBLER__
+ * macro myAssemblerMacro
+ *     in      YL, TCNT0
+ *     sts     timer0Snapshot, YL
+ *     endm
+ * #endif
+ * #define USB_SOF_HOOK                    myAssemblerMacro
+ * This macro (if defined) is executed in the assembler module when a
+ * Start Of Frame condition is detected. It is recommended to define it to
+ * the name of an assembler macro which is defined here as well so that more
+ * than one assembler instruction can be used. The macro may use the register
+ * YL and modify SREG. If it lasts longer than a couple of cycles, USB messages
+ * immediately after an SOF pulse may be lost and must be retried by the host.
+ * What can you do with this hook? Since the SOF signal occurs exactly every
+ * 1 ms (unless the host is in sleep mode), you can use it to tune OSCCAL in
+ * designs running on the internal RC oscillator.
+ * Please note that Start Of Frame detection works only if D- is wired to the
+ * interrupt, not D+. THIS IS DIFFERENT THAN MOST EXAMPLES!
+ */
+#define USB_CFG_CHECK_DATA_TOGGLING     0
+/* define this macro to 1 if you want to filter out duplicate data packets
+ * sent by the host. Duplicates occur only as a consequence of communication
+ * errors, when the host does not receive an ACK. Please note that you need to
+ * implement the filtering yourself in usbFunctionWriteOut() and
+ * usbFunctionWrite(). Use the global usbCurrentDataToken and a static variable
+ * for each control- and out-endpoint to check for duplicate packets.
  */
 #define USB_CFG_HAVE_MEASURE_FRAME_LENGTH   1
 /* define this macro to 1 if you want the function usbMeasureFrameLength()
