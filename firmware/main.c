@@ -1,11 +1,8 @@
 /* Name: main.c
- * Project: Thermostat based on AVR USB driver
- * Author: Christian Starkjohann
- * Creation Date: 2006-04-23
- * Tabsize: 4
- * Copyright: (c) 2006 by OBJECTIVE DEVELOPMENT Software GmbH
- * License: Proprietary, free under certain conditions. See Documentation.
- * This Revision: $Id: main.c 537 2008-02-28 21:13:01Z cs $
+ * Project: 1-Key Keyboard
+ * Author: Flip van den Berg - www.flipwork.nl
+ * Creation Date: 2008-10-06
+ * Based on AVR-USB drivers from Objective Developments - http://www.obdev.at/products/avrusb/index.html
  */
 
 #include <avr/io.h>
@@ -14,43 +11,23 @@
 #include <avr/interrupt.h>
 #include <avr/pgmspace.h>
 #include <util/delay.h>
+#include <stdlib.h>
 
 #include "usbdrv.h"
 #include "oddebug.h"
 
-/*
-Pin assignment:
-PB0 = key input (active low with pull-up)
-PB2 = analog input (ADC1)
-PB1 = LED output (active high)
-
-PB3, PB4 = USB data lines
-*/
-
-#define BIT_LED 1
-#define BIT_KEY 0
-
-#define LED_ON()   (PORTB &= ~(1 << BIT_LED))
-#define LED_OFF()  (PORTB |= (1 << BIT_LED))
-#define LED_INIT() (LED_OFF(), DDRB |= 1 << BIT_LED)
-
-#define UTIL_BIN4(x)        (uchar)((0##x & 01000)/64 + (0##x & 0100)/16 + (0##x & 010)/4 + (0##x & 1))
-#define UTIL_BIN8(hi, lo)   (uchar)(UTIL_BIN4(hi) * 16 + UTIL_BIN4(lo))
-
-#ifndef NULL
-#define NULL    ((void *)0)
-#endif
+#define BUTTON_PORT PORTB       /* PORTx - register for button output */
+#define BUTTON_PIN PINB         /* PINx - register for button input */
+#define BUTTON_BIT PB3          /* bit for button input/output */
 
 /* ------------------------------------------------------------------------- */
 
 static uchar    reportBuffer[2];    /* buffer for HID reports */
 static uchar    idleRate;           /* in 4 ms units */
+static uchar    reportCount;		/* current report */
 
-static uchar    adcPending;
-static uchar    isRecording;
-
-static uchar    valueBuffer[16];
-static uchar    *nextDigit;
+static uchar    buttonState;		/*  stores state of button */
+static uchar	debounceTimeIsOver;	/* for switch debouncing */
 
 /* ------------------------------------------------------------------------- */
 
@@ -83,116 +60,46 @@ PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /*
  * Redundant entries (such as LOGICAL_MINIMUM and USAGE_PAGE) have been omitted
  * for the second INPUT item.
  */
+static void timerPoll(void)
+{
+	static unsigned int timerCnt;
 
-/* Keyboard usage values, see usb.org's HID-usage-tables document, chapter
- * 10 Keyboard/Keypad Page for more codes.
- */
-#define MOD_CONTROL_LEFT    (1<<0)
-#define MOD_SHIFT_LEFT      (1<<1)
-#define MOD_ALT_LEFT        (1<<2)
-#define MOD_GUI_LEFT        (1<<3)
-#define MOD_CONTROL_RIGHT   (1<<4)
-#define MOD_SHIFT_RIGHT     (1<<5)
-#define MOD_ALT_RIGHT       (1<<6)
-#define MOD_GUI_RIGHT       (1<<7)
-
-#define KEY_1       30
-#define KEY_2       31
-#define KEY_3       32
-#define KEY_4       33
-#define KEY_5       34
-#define KEY_6       35
-#define KEY_7       36
-#define KEY_8       37
-#define KEY_9       38
-#define KEY_0       39
-#define KEY_RETURN  40
-
-/* ------------------------------------------------------------------------- */
+    if(TIFR & (1 << TOV1)){
+        TIFR = (1 << TOV1); /* clear overflow */
+        if(++timerCnt >= 3){       // 3/63 sec delay for switch debouncing
+			timerCnt = 0;
+			debounceTimeIsOver = 1; 
+        }
+    }
+}
 
 static void buildReport(void)
 {
-uchar   key = 0;
+uchar key = 0; //if not changed by the if-statement below, then send an empty report
 
-    if(nextDigit != NULL){
-        key = *nextDigit;
+    if(reportCount == 0){
+        if (buttonState == 1){ // if button is not pressed
+		key = 0x30; // key = ]
+		} else {
+		key = 0x2F;  // key = [
+    	}
     }
+
+
+	reportCount++;
     reportBuffer[0] = 0;    /* no modifiers */
     reportBuffer[1] = key;
 }
 
-static void evaluateADC(unsigned int value)
-{
-uchar   digit;
+static void checkButtonChange(void) {
+	
+	uchar tempButtonValue = bit_is_clear(BUTTON_PIN, BUTTON_BIT); //status of switch is stored in tempButtonValue 
 
-    value += value + (value >> 1);  /* value = value * 2.5 for output in mV */
-    nextDigit = &valueBuffer[sizeof(valueBuffer)];
-    *--nextDigit = 0xff;/* terminate with 0xff */
-    *--nextDigit = 0;
-    *--nextDigit = KEY_RETURN;
-    do{
-        digit = value % 10;
-        value /= 10;
-        *--nextDigit = 0;
-        if(digit == 0){
-            *--nextDigit = KEY_0;
-        }else{
-            *--nextDigit = KEY_1 - 1 + digit;
-        }
-    }while(value != 0);
-}
-
-/* ------------------------------------------------------------------------- */
-
-static void setIsRecording(uchar newValue)
-{
-    isRecording = newValue;
-    if(isRecording){
-	LED_ON();
-    }else{
-        LED_OFF();
-    }
-}
-
-/* ------------------------------------------------------------------------- */
-
-static void keyPoll(void)
-{
-static uchar    keyMirror;
-uchar           key;
-
-    key = PINB & (1 << BIT_KEY);
-    if(keyMirror != key){   /* status changed */
-        keyMirror = key;
-        if(!key){           /* key was pressed */
-            setIsRecording(!isRecording);
-        }
-    }
-}
-
-static void adcPoll(void)
-{
-    if(adcPending && !(ADCSRA & (1 << ADSC))){
-        adcPending = 0;
-        evaluateADC(ADC);
-    }
-}
-
-static void timerPoll(void)
-{
-static uchar timerCnt;
-
-    if(TIFR & (1 << TOV1)){
-        TIFR = (1 << TOV1); /* clear overflow */
-        keyPoll();
-        if(++timerCnt >= 63){       /* ~ 1 second interval */
-            timerCnt = 0;
-            if(isRecording){
-                adcPending = 1;
-                ADCSRA |= (1 << ADSC);  /* start next conversion */
-            }
-        }
-    }
+	if (tempButtonValue != buttonState && debounceTimeIsOver == 1){ //if status has changed and the debounce-delay is over
+		buttonState = tempButtonValue;	// change buttonState to new state
+		debounceTimeIsOver = 0;	// debounce timer starts
+		reportCount = 0; // start report 
+	}
 }
 
 /* ------------------------------------------------------------------------- */
@@ -202,15 +109,9 @@ static void timerInit(void)
     TCCR1 = 0x0b;           /* select clock: 16.5M/1k -> overflow rate = 16.5M/256k = 62.94 Hz */
 }
 
-static void adcInit(void)
-{
-    ADMUX = UTIL_BIN8(1001, 1111);  /* Vref=2.56V, measure ADC4 (temp sensor) */
-    ADCSRA = UTIL_BIN8(1000, 0111); /* enable ADC, not free running, interrupt disable, rate = 1/128 */
-}
-
-/* ------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------------- */
 /* ------------------------ interface to USB driver ------------------------ */
-/* ------------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------------- */
 
 uchar	usbFunctionSetup(uchar data[8])
 {
@@ -308,30 +209,41 @@ uchar   calibrationValue;
     if(calibrationValue != 0xff){
         OSCCAL = calibrationValue;
     }
-    odDebugInit();
-    usbDeviceDisconnect();
-    for(i=0;i<20;i++){  /* 300 ms disconnect */
-        _delay_ms(15);
+    
+	//odDebugInit();
+    usbInit();
+    usbDeviceDisconnect();  /* enforce re-enumeration, do this while interrupts are disabled! */
+    i = 0;
+    while(--i){             /* fake USB disconnect for > 250 ms */
+        wdt_reset();
+        _delay_ms(1);
     }
     usbDeviceConnect();
-    LED_INIT();
-    PORTB |= 1 << BIT_KEY;  /* pull-up on key input */
+
     wdt_enable(WDTO_1S);
+
+	/* turn on internal pull-up resistor for the switch */
+    BUTTON_PORT |= _BV(BUTTON_BIT);
+
     timerInit();
-    adcInit();
-    usbInit();
+
     sei();
+
     for(;;){    /* main event loop */
         wdt_reset();
         usbPoll();
-        if(usbInterruptIsReady() && nextDigit != NULL){ /* we can send another key */
-            buildReport();
-            usbSetInterrupt(reportBuffer, sizeof(reportBuffer));
-            if(*++nextDigit == 0xff)    /* this was terminator character */
-                nextDigit = NULL;
-        }
-        timerPoll();
-        adcPoll();
-    }
-    return 0;
+
+		/* A USB keypress cycle is defined as a scancode being present in a report, and
+		then absent from a later report. To press and release the Caps Lock key, instead of
+		holding it down, we need to send the report with the Caps Lock scancode and
+		then an empty report. */
+		
+		if(usbInterruptIsReady() && reportCount < 2){ /* we can send another key */
+        	buildReport();
+           	usbSetInterrupt(reportBuffer, sizeof(reportBuffer));
+        	}
+        checkButtonChange();
+		timerPoll();
+	}
+   	return 0;
 }
