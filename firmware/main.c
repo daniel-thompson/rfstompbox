@@ -18,7 +18,7 @@
 
 #define BUTTON_PORT PORTB       /* PORTx - register for button output */
 #define BUTTON_PIN PINB         /* PINx - register for button input */
-#define BUTTON_BIT PB3          /* bit for button input/output */
+#define BUTTON_BIT PB0          /* bit for button input/output */
 
 /* ------------------------------------------------------------------------- */
 
