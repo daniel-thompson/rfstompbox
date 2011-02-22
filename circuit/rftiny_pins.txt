@@ -1,11 +1,13 @@
 ATTiny85 (PDIP)
 ===============
+
                 +----+
 not RESET  PB5 -|    |- VCC
 PCINT3/D-  PB3 -|    |- PB2  SCK/ADC1
        D+  PB4 -|    |- PB1  MISO
            GND -|    |- PB0  MOSI
                 +----+
+
 
 ISP
 ===
@@ -17,3 +19,11 @@ ISP
            GND  + +  PB5  not RESET
      MOSI  PB0	+ +  PB2  SCK/ADC1
 	   VCC	+ *  PB1  MISO
+
+
+EasyLogger daughter board
+=========================
+
+           GND  + +  PB5  not RESET
+   Switch  PB0	+ +  PB2  Sensor
+	   VCC	+ *  PB1  LED
