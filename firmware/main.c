@@ -30,6 +30,9 @@ PB3, PB4 = USB data lines
 #define BIT_LED 1
 #define BIT_KEY 0
 
+#define LED_ON()   (PORTB &= ~(1 << BIT_LED))
+#define LED_OFF()  (PORTB |= (1 << BIT_LED))
+#define LED_INIT() (LED_OFF(), DDRB |= 1 << BIT_LED)
 
 #define UTIL_BIN4(x)        (uchar)((0##x & 01000)/64 + (0##x & 0100)/16 + (0##x & 010)/4 + (0##x & 1))
 #define UTIL_BIN8(hi, lo)   (uchar)(UTIL_BIN4(hi) * 16 + UTIL_BIN4(lo))
@@ -145,9 +148,9 @@ static void setIsRecording(uchar newValue)
 {
     isRecording = newValue;
     if(isRecording){
-        PORTB |= 1 << BIT_LED;      /* LED on */
+	LED_ON();
     }else{
-        PORTB &= ~(1 << BIT_LED);   /* LED off */
+        LED_OFF();
     }
 }
 
@@ -311,7 +314,7 @@ uchar   calibrationValue;
         _delay_ms(15);
     }
     usbDeviceConnect();
-    DDRB |= 1 << BIT_LED;   /* output for LED */
+    LED_INIT();
     PORTB |= 1 << BIT_KEY;  /* pull-up on key input */
     wdt_enable(WDTO_1S);
     timerInit();
