@@ -78,10 +78,8 @@ static void buildReport(void)
 uchar key = 0; //if not changed by the if-statement below, then send an empty report
 
     if(reportCount == 0){
-        if (buttonState == 1){ // if button is not pressed
-		key = 0x30; // key = ]
-		} else {
-		key = 0x2F;  // key = [
+        if (buttonState == 1) { // if button is pressed
+	    key = 0x2C; // Keyboard Spacebar
     	}
     }
 
