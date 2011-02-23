@@ -9,6 +9,8 @@
 
 #include <avr/io.h>
 
+#include "usbdrv.h"
+
 #ifndef uchar
 #define uchar   unsigned char
 #endif
