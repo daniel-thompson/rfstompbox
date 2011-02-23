@@ -26,7 +26,6 @@
 
 static uchar    reportBuffer[2];    /* buffer for HID reports */
 static uchar    idleRate;           /* in 4 ms units */
-static uchar    reportCount;		/* current report */
 
 static uchar    buttonState;		/*  stores state of button */
 static uchar	debounceTimeIsOver;	/* for switch debouncing */
@@ -62,6 +61,79 @@ PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /*
  * Redundant entries (such as LOGICAL_MINIMUM and USAGE_PAGE) have been omitted
  * for the second INPUT item.
  */
+
+/* ------------------------------------------------------------------------- */
+
+static void usbSendScanCode(unsigned char scancode)
+{
+
+	reportBuffer[0] = 0;
+	reportBuffer[1] = scancode;
+
+	usbSetInterrupt(reportBuffer, sizeof(reportBuffer));
+}
+
+/* ------------------------------------------------------------------------- */
+
+#define SCANQ_LENGTH 8
+#define SCANQ_MASK (SCANQ_LENGTH-1)
+#define SCANQ_NEXT(x) ((x+1) & SCANQ_MASK)
+
+static unsigned char scanq[8];
+static char scanq_head;
+static char scanq_tail;
+static char scanq_scancode; /* last trasnsmitted scancode */
+
+static void scanqAppend(unsigned char scancode)
+{
+	char next_tail = SCANQ_NEXT(scanq_tail);
+
+	/* don't allow "no key press" to be queued. scanqPoll() will
+	 * automatically insert key up as required and its algorithm
+	 * will fail if "no key press" is queued.
+	 */
+	if (0 == scancode)
+		return; /* send no keys */
+
+	if (next_tail == scanq_head) {
+		/* TODO: need to call error handler here */
+		return;
+	}
+
+	scanq[(int) scanq_tail] = scancode;
+	scanq_tail = next_tail;
+
+}
+
+static void scanqPoll(void)
+{
+	if(!usbInterruptIsReady())
+		return;
+
+	if (scanq_head == scanq_tail) {
+		if (scanq_scancode) {
+			scanq_scancode = 0;
+			usbSendScanCode(0); /* no keys pressed */
+		}
+	} else {
+		char scancode = scanq[(int) scanq_head];
+
+		if (scancode == scanq_scancode) {
+			/* this could loop forever if zero were inserted into the
+			 * queue (scanqAppend() prevents this)
+			 */
+			scanq_scancode = 0;
+			usbSendScanCode(0); /* no keys pressed */
+		} else {
+			scanq_scancode = scancode;
+			usbSendScanCode(scancode);
+			scanq_head = SCANQ_NEXT(scanq_head);
+		}
+	}
+}
+
+/* ------------------------------------------------------------------------- */
+
 static void timerPoll(void)
 {
 	static unsigned int timerCnt;
@@ -75,30 +147,22 @@ static void timerPoll(void)
     }
 }
 
-static void buildReport(void)
-{
-uchar key = 0; //if not changed by the if-statement below, then send an empty report
+/* ------------------------------------------------------------------------- */
 
-    if(reportCount == 0){
-        if (buttonState == 1) { // if button is pressed
-	    key = 0x2C; // Keyboard Spacebar
-    	}
-    }
-
-
-	reportCount++;
-    reportBuffer[0] = 0;    /* no modifiers */
-    reportBuffer[1] = key;
-}
-
-static void checkButtonChange(void) {
+static void buttonPoll(void) {
 	
 	uchar tempButtonValue = bit_is_clear(BUTTON_PIN, BUTTON_BIT); //status of switch is stored in tempButtonValue 
 
 	if (tempButtonValue != buttonState && debounceTimeIsOver == 1){ //if status has changed and the debounce-delay is over
 		buttonState = tempButtonValue;	// change buttonState to new state
 		debounceTimeIsOver = 0;	// debounce timer starts
-		reportCount = 0; // start report 
+
+		if (buttonState == 1) {
+			/* key down */
+			scanqAppend(0x2c); /* keyboard spacebar */
+		} else {
+			/* key up */
+		}
 	}
 }
 
@@ -121,7 +185,7 @@ usbRequest_t    *rq = (void *)data;
     if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS){    /* class request type */
         if(rq->bRequest == USBRQ_HID_GET_REPORT){  /* wValue: ReportType (highbyte), ReportID (lowbyte) */
             /* we only have one report type, so don't look at wValue */
-            buildReport();
+            /* buildReport(); */
             return sizeof(reportBuffer);
         }else if(rq->bRequest == USBRQ_HID_GET_IDLE){
             usbMsgPtr = &idleRate;
@@ -182,18 +246,10 @@ uchar   calibrationValue;
     for(;;){    /* main event loop */
         wdt_reset();
         usbPoll();
+	buttonPoll();
+	scanqPoll();
+	timerPoll();
+    }
 
-		/* A USB keypress cycle is defined as a scancode being present in a report, and
-		then absent from a later report. To press and release the Caps Lock key, instead of
-		holding it down, we need to send the report with the Caps Lock scancode and
-		then an empty report. */
-		
-		if(usbInterruptIsReady() && reportCount < 2){ /* we can send another key */
-        	buildReport();
-           	usbSetInterrupt(reportBuffer, sizeof(reportBuffer));
-        	}
-        checkButtonChange();
-		timerPoll();
-	}
-   	return 0;
+    return 0;
 }
