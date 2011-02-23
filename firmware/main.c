@@ -137,7 +137,9 @@ usbRequest_t    *rq = (void *)data;
 
 void    hadUsbReset(void)
 {
+    cli();
     calibrateOscillator();
+    sei();
 
     /* store the calibrated value in EEPROM if it has changed */
     if (eeprom_read_byte(0) != OSCCAL)
