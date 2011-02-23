@@ -28,6 +28,7 @@ static uchar    reportBuffer[2];    /* buffer for HID reports */
 static uchar    idleRate;           /* in 4 ms units */
 
 static uchar    buttonState;		/*  stores state of button */
+static uchar    buttonStateChanged;     /*  indicates edge detect on button */
 static uchar	debounceTimeIsOver;	/* for switch debouncing */
 
 /* ------------------------------------------------------------------------- */
@@ -155,15 +156,63 @@ static void buttonPoll(void) {
 
 	if (tempButtonValue != buttonState && debounceTimeIsOver == 1){ //if status has changed and the debounce-delay is over
 		buttonState = tempButtonValue;	// change buttonState to new state
+		buttonStateChanged = 1;
 		debounceTimeIsOver = 0;	// debounce timer starts
-
-		if (buttonState == 1) {
-			/* key down */
-			scanqAppend(0x2c); /* keyboard spacebar */
-		} else {
-			/* key up */
-		}
 	}
+}
+
+/* ------------------------------------------------------------------------- */
+
+static void stateMachinePoll(void)
+{
+	static char state = 1;
+	static uchar timeout;
+
+	switch (state) {
+	case 1:
+		if (buttonStateChanged && buttonState) {
+			scanqAppend(0x2c); /* keyboard spacebar */
+			timeout = usbSofCount + 250u;
+			state = 2;
+		}
+		break;
+	case 2:
+		if (buttonStateChanged && buttonState) {
+			/* spotted a double click */
+			scanqAppend(0x2c); /* keyboard spacebar */
+			scanqAppend(30); /* keypad 1 */
+			state = 3;
+		}
+
+		if (timeout == usbSofCount) {
+			state = 1;
+		}
+		break;
+	case 3:
+		if (buttonStateChanged && buttonState) {
+			scanqAppend(0x2c); /* keyboard spacebar */
+			timeout = usbSofCount + 250u;
+			state = 4;
+		}
+		break;
+	case 4:
+		if (buttonStateChanged && buttonState) {
+			/* spotted a double click */
+			scanqAppend(0x2c); /* keyboard spacebar */
+			scanqAppend(31); /* keypad 2 */
+			state = 1;
+		}
+
+		if (timeout == usbSofCount) {
+			state = 3;
+		}
+		break;
+	default:
+		state = 1;
+		break;
+	}
+
+	buttonStateChanged = 0;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -247,6 +296,7 @@ uchar   calibrationValue;
         wdt_reset();
         usbPoll();
 	buttonPoll();
+	stateMachinePoll();
 	scanqPoll();
 	timerPoll();
     }
