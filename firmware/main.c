@@ -1,9 +1,17 @@
-/* Name: main.c
- * Project: 1-Key Keyboard
- * Author: Flip van den Berg - www.flipwork.nl
- * Creation Date: 2008-10-06
- * Based on AVR-USB drivers from Objective Developments - http://www.obdev.at/products/avrusb/index.html
+/*
+ * main.c
+ *
+ * Main functions for RFStompbox, a firmware for a USB guitar pedal based
+ * on vusb.
+ *
+ * Copyright (C) 2010 Daniel Thompson <daniel@redfelineninja.org.uk> 
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  */
+
 
 #include <avr/io.h>
 #include <avr/wdt.h>
@@ -18,9 +26,20 @@
 
 #include "osccal.h"
 
+/* ------------------------------------------------------------------------- */
+
 #define BUTTON_PORT PORTB       /* PORTx - register for button output */
 #define BUTTON_PIN PINB         /* PINx - register for button input */
 #define BUTTON_BIT PB0          /* bit for button input/output */
+
+#define LED_BIT PB1
+#define LED_ON()   (PORTB &= ~_BV(LED_BIT))
+#define LED_OFF()  (PORTB |= _BV(LED_BIT))
+#define LED_TOGGLE() (PORTB ^= _BV(LED_BIT))
+#define LED_INIT() (LED_OFF(), DDRB |= _BV(LED_BIT))
+
+#define UTIL_BIN4(x)        (uchar)((0##x & 01000)/64 + (0##x & 0100)/16 + (0##x & 010)/4 + (0##x & 1))
+#define UTIL_BIN8(hi, lo)   (uchar)(UTIL_BIN4(hi) * 16 + UTIL_BIN4(lo))
 
 /* ------------------------------------------------------------------------- */
 
@@ -29,7 +48,6 @@ static uchar    idleRate;           /* in 4 ms units */
 
 static uchar    buttonState;		/*  stores state of button */
 static uchar    buttonStateChanged;     /*  indicates edge detect on button */
-static uchar	debounceTimeIsOver;	/* for switch debouncing */
 
 /* ------------------------------------------------------------------------- */
 
@@ -65,7 +83,7 @@ PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /*
 
 /* ------------------------------------------------------------------------- */
 
-static void usbSendScanCode(unsigned char scancode)
+static void usbSendScanCode(uchar scancode)
 {
 
 	reportBuffer[0] = 0;
@@ -80,14 +98,14 @@ static void usbSendScanCode(unsigned char scancode)
 #define SCANQ_MASK (SCANQ_LENGTH-1)
 #define SCANQ_NEXT(x) ((x+1) & SCANQ_MASK)
 
-static unsigned char scanq[8];
-static char scanq_head;
-static char scanq_tail;
-static char scanq_scancode; /* last trasnsmitted scancode */
+static uchar scanq[8];
+static uchar scanq_head;
+static uchar scanq_tail;
+static uchar scanq_scancode; /* last trasnsmitted scancode */
 
-static void scanqAppend(unsigned char scancode)
+static void scanqAppend(uchar scancode)
 {
-	char next_tail = SCANQ_NEXT(scanq_tail);
+	uchar next_tail = SCANQ_NEXT(scanq_tail);
 
 	/* don't allow "no key press" to be queued. scanqPoll() will
 	 * automatically insert key up as required and its algorithm
@@ -117,7 +135,7 @@ static void scanqPoll(void)
 			usbSendScanCode(0); /* no keys pressed */
 		}
 	} else {
-		char scancode = scanq[(int) scanq_head];
+		uchar scancode = scanq[(int) scanq_head];
 
 		if (scancode == scanq_scancode) {
 			/* this could loop forever if zero were inserted into the
@@ -135,44 +153,82 @@ static void scanqPoll(void)
 
 /* ------------------------------------------------------------------------- */
 
+#define TICKS_PER_SECOND      ((F_CPU + 1024) / 2048)
+#define TICKS_PER_HUNDREDTH   ((TICKS_PER_SECOND + 50) / 100)
+#define TICKS_PER_MILLISECOND ((TICKS_PER_SECOND + 500) / 1000)
+
+uchar clockHundredths;
+uchar clockMilliseconds;
+
+#define timeAfter(x, y) (((schar) (x - y)) > 0)
+
+static void timerInit(void)
+{
+    /* first nibble:  free running clock, no PWM
+     * second nibble: prescale by 2048 (~8 ticks per millisecond)
+     */
+    TCCR1 = UTIL_BIN8(0000, 1100);
+
+    /* syncrhronous clocking mode */
+    /*PLLCSR &= ~_BV(PCKE);*/ /* clear by default */
+}
+
 static void timerPoll(void)
 {
-	static unsigned int timerCnt;
+    static uchar next_hundredth = TICKS_PER_HUNDREDTH;
+    static uchar next_millisecond = TICKS_PER_MILLISECOND;
 
-    if(TIFR & (1 << TOV1)){
-        TIFR = (1 << TOV1); /* clear overflow */
-        if(++timerCnt >= 3){       // 3/63 sec delay for switch debouncing
-			timerCnt = 0;
-			debounceTimeIsOver = 1; 
-        }
+    while (timeAfter(TCNT1, next_hundredth)) {
+	clockHundredths++;
+	next_hundredth += TICKS_PER_HUNDREDTH;
+    }
+
+    while (timeAfter(TCNT1, next_millisecond)) {
+	clockMilliseconds++;
+	next_millisecond += TICKS_PER_MILLISECOND;
     }
 }
 
 /* ------------------------------------------------------------------------- */
 
-static void buttonPoll(void) {
-	
-	uchar tempButtonValue = bit_is_clear(BUTTON_PIN, BUTTON_BIT); //status of switch is stored in tempButtonValue 
+static void buttonPoll(void)
+{
+    static uchar debounceTimeIsOver;
+    static uchar debounceTimeout;
 
-	if (tempButtonValue != buttonState && debounceTimeIsOver == 1){ //if status has changed and the debounce-delay is over
-		buttonState = tempButtonValue;	// change buttonState to new state
-		buttonStateChanged = 1;
-		debounceTimeIsOver = 0;	// debounce timer starts
-	}
+    uchar tempButtonValue = bit_is_clear(BUTTON_PIN, BUTTON_BIT);
+
+    if (!debounceTimeIsOver)
+	if (timeAfter(clockHundredths, debounceTimeout))
+            debounceTimeIsOver = 1;
+
+    /* trigger a change if status has changed and the debounce-delay is over,
+     * this has good debounce rejection and latency but is subject to
+     * false trigger on electrical noise
+     */
+    if (tempButtonValue != buttonState && debounceTimeIsOver == 1) {
+	/* change button state */
+	buttonState = tempButtonValue;
+	buttonStateChanged = 1;
+
+	/* restart debounce timer */
+	debounceTimeIsOver = 0;
+	debounceTimeout = clockHundredths + 5;
+    }
 }
 
 /* ------------------------------------------------------------------------- */
 
 static void stateMachinePoll(void)
 {
-	static char state = 1;
+	static uchar state = 1;
 	static uchar timeout;
 
 	switch (state) {
 	case 1:
 		if (buttonStateChanged && buttonState) {
 			scanqAppend(0x2c); /* keyboard spacebar */
-			timeout = usbSofCount + 250u;
+			timeout = clockHundredths + 40;
 			state = 2;
 		}
 		break;
@@ -184,14 +240,14 @@ static void stateMachinePoll(void)
 			state = 3;
 		}
 
-		if (timeout == usbSofCount) {
+		if (timeAfter(clockHundredths, timeout)) {
 			state = 1;
 		}
 		break;
 	case 3:
 		if (buttonStateChanged && buttonState) {
 			scanqAppend(0x2c); /* keyboard spacebar */
-			timeout = usbSofCount + 250u;
+			timeout = clockHundredths + 40;
 			state = 4;
 		}
 		break;
@@ -203,7 +259,7 @@ static void stateMachinePoll(void)
 			state = 1;
 		}
 
-		if (timeout == usbSofCount) {
+		if (timeAfter(clockHundredths, timeout)) {
 			state = 3;
 		}
 		break;
@@ -217,9 +273,17 @@ static void stateMachinePoll(void)
 
 /* ------------------------------------------------------------------------- */
 
-static void timerInit(void)
+static void testPoll(void)
 {
-    TCCR1 = 0x0b;           /* select clock: 16.5M/1k -> overflow rate = 16.5M/256k = 62.94 Hz */
+#if 0
+    /* show (in humane units) that the tick rate is correctly calculated */
+    static uchar ledTimeout;
+
+    if (timeAfter(clockHundredths, ledTimeout)) {
+	ledTimeout += 100; /* two second duty cycle */
+	LED_TOGGLE();
+    }
+#endif
 }
 
 /* -------------------------------------------------------------------------------- */
@@ -275,6 +339,7 @@ uchar   calibrationValue;
     
 	//odDebugInit();
     usbInit();
+
     usbDeviceDisconnect();  /* enforce re-enumeration, do this while interrupts are disabled! */
     i = 0;
     while(--i){             /* fake USB disconnect for > 250 ms */
@@ -285,6 +350,7 @@ uchar   calibrationValue;
 
     wdt_enable(WDTO_1S);
 
+    LED_INIT();
 	/* turn on internal pull-up resistor for the switch */
     BUTTON_PORT |= _BV(BUTTON_BIT);
 
@@ -299,6 +365,7 @@ uchar   calibrationValue;
 	stateMachinePoll();
 	scanqPoll();
 	timerPoll();
+	testPoll();
     }
 
     return 0;
