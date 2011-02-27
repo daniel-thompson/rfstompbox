@@ -219,56 +219,77 @@ static void buttonPoll(void)
 
 /* ------------------------------------------------------------------------- */
 
+struct state {
+	uchar next_state;
+	uchar timeout;
+	uchar timeout_state;
+	uchar scancode;
+};
+
+static PROGMEM struct state stateTable[] = {
+	[  0] = {   1,   0,   1, 0 },
+	[  1] = {   2,   0,   0, 0x2c },
+	[  2] = {   3,  40,   1, 0x2c },
+	[  3] = {   0,   0,   4,   30 },
+	[  4] = {   5,   0,   0, 0x2c },
+	[  5] = {   6,  40,   4, 0x2c },
+	[  6] = {   0,   0,   1,   31 },
+
+};
+
+static union { struct state current; uint32_t raw; } state;
+static uchar stateWaitForButton;
+static uchar stateTimeout;
+
+static void stateMachineSwitchTo(uchar stateId)
+{
+	state.raw = pgm_read_dword(stateTable + stateId);
+
+	/* handle transient states early */
+	while (0 == state.current.next_state &&
+	       0 == state.current.timeout) {
+		scanqAppend(state.current.scancode);
+
+		state.raw = pgm_read_dword(stateTable + state.current.timeout_state);
+        }
+
+	/* figure out what button state we are waiting for (and clear the marker bit) */
+	stateWaitForButton = !(state.current.next_state & _BV(7));
+	state.current.next_state &= ~_BV(7);
+
+	/* calculate the timeout action (this may be a nop) */
+	stateTimeout = clockHundredths + state.current.timeout;
+
+}
+
+static void stateMachineInit(void)
+{
+	stateMachineSwitchTo(1);
+}
+
 static void stateMachinePoll(void)
 {
-	static uchar state = 1;
-	static uchar timeout;
+	/* check for timeout first */
+	if (state.current.timeout &&
+	    timeAfter(clockHundredths, stateTimeout)) {
+		if (0 == state.current.next_state &&
+		    0 != state.current.scancode)
+			scanqAppend(state.current.scancode);
 
-	switch (state) {
-	case 1:
-		if (buttonStateChanged && buttonState) {
-			scanqAppend(0x2c); /* keyboard spacebar */
-			timeout = clockHundredths + 40;
-			state = 2;
-		}
-		break;
-	case 2:
-		if (buttonStateChanged && buttonState) {
-			/* spotted a double click */
-			scanqAppend(0x2c); /* keyboard spacebar */
-			scanqAppend(30); /* keypad 1 */
-			state = 3;
-		}
-
-		if (timeAfter(clockHundredths, timeout)) {
-			state = 1;
-		}
-		break;
-	case 3:
-		if (buttonStateChanged && buttonState) {
-			scanqAppend(0x2c); /* keyboard spacebar */
-			timeout = clockHundredths + 40;
-			state = 4;
-		}
-		break;
-	case 4:
-		if (buttonStateChanged && buttonState) {
-			/* spotted a double click */
-			scanqAppend(0x2c); /* keyboard spacebar */
-			scanqAppend(31); /* keypad 2 */
-			state = 1;
-		}
-
-		if (timeAfter(clockHundredths, timeout)) {
-			state = 3;
-		}
-		break;
-	default:
-		state = 1;
-		break;
+		stateMachineSwitchTo(state.current.timeout_state);
 	}
 
+	/* check for state change due to button */
+	if (buttonStateChanged &&
+	    0 != state.current.next_state &&
+	    (buttonState == stateWaitForButton)) {
+		if (0 != state.current.scancode)
+			scanqAppend(state.current.scancode);
+	
+		stateMachineSwitchTo(state.current.next_state);
+	}
 	buttonStateChanged = 0;
+
 }
 
 /* ------------------------------------------------------------------------- */
@@ -354,6 +375,7 @@ uchar   calibrationValue;
 	/* turn on internal pull-up resistor for the switch */
     BUTTON_PORT |= _BV(BUTTON_BIT);
 
+    stateMachineInit();
     timerInit();
 
     sei();
