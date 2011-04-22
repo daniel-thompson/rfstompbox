@@ -1,8 +1,6 @@
-This file documents changes in the software, firmware and hardware of the
-EasyLogger device. New entries are always appended to the end of the file.
-Scroll down to the bottom to see the most recent changes.
+ChangeLog
+=========
 
-* Release 2011-04-21
-
-- Initial release.
+0.5:
+ - Initial release.
 
