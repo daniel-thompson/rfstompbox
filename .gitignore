@@ -1,4 +1,5 @@
 firmware/cscope.out
 firmware/*.o
+firmware/usbdrv/*.o
 firmware/main.bin
 firmware/main.hex
