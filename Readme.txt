@@ -1,19 +1,17 @@
-This is the README file for EasyLogger.
+This is the README file for RFStompbox.
 
-EasyLogger is primarily an example application. It demonstrates how two more
-I/O pins can be acquired on the ATTiny45 by omitting the external crystal.
-Instead of a crystal, the internal RC oscillator is used and AVR-USB is
-configured to run on 16.5 MHz +/- 1% clock rate with internal synchronization
-to the host.
+RFStompbox is a USB keyboard with just one key, albeit a multifunction one.
+It is designed to be built with a foot switch and a strong case in order to
+provide foot operated control for a computer.
 
-The example application is a data logger. It reads an ADC conversion value
-every second and sends it to the host. In order to save the operating system
-specific host software, it presents itself as a USB keyboard to the host and
-automatically enters the values it measures. To get a series of measurement
-values, just open a text editor or even a spreadsheet like Excel and press the
-start/stop button on the logger. EasyLogger will start to type values directly
-into your host application. The LED indicates that EasyLogger is active while
-it takes samples and sends keystrokes to your computer.
+It can be used:
+
+- to start and stop playback of backing tracks
+- to engage/disengage software implemented effects
+- to switch patches or presets
+
+At power on it acts as a space bar (without auto repeat) but by holding down
+the button for a second then other modes can be selected.
 
 
 FILES IN THE DISTRIBUTION
@@ -27,7 +25,9 @@ Changelog.txt ..... Logfile documenting changes in firm- and hardware.
 
 BUILDING AND INSTALLING
 =======================
-This project can be built on Unix (Linux, FreeBSD or Mac OS X) or Windows.
+
+This project can be built on Unix (GNU/Linux, FreeBSD or Mac OS X) or Windows
+although no testing has been done on any platform except GNU/Linux.
 
 Building on Windows:
 You need WinAVR to compile the firmware. A package can be downloaded from:
@@ -39,7 +39,7 @@ check whether you need to edit the "Makefile" (e.g. change the ISP upload
 tool) and type "make" to compile the source code. Before you upload the code
 to the device with "make flash", you should set the fuses with "make fuse".
 
-Building on Unix (Linux, FreeBSD and Mac):
+Building on Unix (GNU/Linux, FreeBSD and Mac):
 You need the GNU toolchain and avr-libc to compile the firmware. See
 
     http://www.nongnu.org/avr-libc/user-manual/install_tools.html
@@ -52,24 +52,69 @@ code. Before you upload the code to the device with "make flash", you
 should set the fuses with "make fuse".
 
 
+MODES OF OPERATION
+==================
 
-ABOUT THE LICENSE
-=================
-It is our intention to make our USB driver and this demo application
-available to everyone. Moreover, we want to make a broad range of USB
-projects and ideas for USB devices available to the general public. We
-therefore want that all projects built with our USB driver are published
-under an Open Source license. Our license for the USB driver and demo code is
-the GNU General Public License Version 2 (GPL2). See the file "License.txt"
-for details.
+At power on the system enters mode 1:
 
-If you don't want to publish your source code under the GPL2, you can simply
-pay money for AVR-USB. As an additional benefit you get USB PIDs for free,
-licensed exclusively to you. See the file "CommercialLicense.txt" for details.
+Mode 1:
+This mode is designed for standard software where the space bar toggles
+on/off controls (e.g. a checkbox in a GUI) or toggles play/pause
+controls (common in media player).
+
+  Single click     -> Send "Space"
+  Double click     -> Disabled
+
+  Hold button down -> Switch to mode 2
+
+Mode 2:
+This mode is desinged for the guitarix or gx_head amp modelling software.
+It can be used to engage/disengage an effect (single click) and also to
+change presets (double click).
+
+  Single click     -> Send "Return"
+  Double click     -> Send "Return", "Return", "1" or
+                      Send "Return", "Return", "2" (toggles)
+
+  Hold button down -> Switch to mode 1
+
+It is possible for anyone with a ICSP programmer to add new modes. See
+source code (or contact author) for more information.
+
+
+HARDWARE
+========
+
+RFStompbox is a member of a family of simple platforms contructed from
+Atmel's ATTiny85 microcontrollers. All family members share the same USB
+pins and these pins have been carefully selected to avoid using pins
+that are needed for in-circuit programming (ICSP). This allows them to be
+reprogrammed without disconnecting them from the computer that supplies
+them power.
+
+The RFStompbox differs from the standard platform by using diodes instead
+of a voltage regulator (not required to monitor a switch) and by connecting
+the switch directly to the main board (rather than a daughterboard hanging
+off the ICSP connector).
+
+USB communications using software bit-banging (thanks to Objective
+Development's V-USB driver). Strictly speaking this circuit does not
+meeting the USB electrical specification but is close enough to work with
+almost all USB hosts. It also uses the USB host clock to callibrate the
+ATTiny's internal oscillator eliminating the need for an external crystal.
+
+The result is a very cheap circuit to build. Have fun.
 
 
 MORE INFORMATION
 ================
+
+RFStompbox was written by Daniel Thompson using driver software and
+example code from Objective Development. For other projects by the same
+author see:
+
+    http://www.redfelineninja.org.uk/
+
 For more information about Objective Development's firmware-only USB driver
 for Atmel's AVR microcontrollers please visit the URL
 
@@ -80,5 +125,5 @@ file "firmware/usbdrv/usbdrv.h".
 
 
 --
+(c) 2011 by Daniel Thompson
 (c) 2007 by OBJECTIVE DEVELOPMENT Software GmbH.
-http://www.obdev.at/

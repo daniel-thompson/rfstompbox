@@ -1,5 +1,4 @@
 # Name: Makefile
-# Project: EasyLogger
 # Author: Christian Starkjohann
 # Creation Date: 2007-06-23
 # Tabsize: 4
