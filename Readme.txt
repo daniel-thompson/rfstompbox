@@ -1,4 +1,5 @@
-This is the README file for RFStompbox.
+README
+======
 
 RFStompbox is a USB keyboard with just one key, albeit a multifunction one.
 It is designed to be built with a foot switch and a strong case in order to
@@ -15,16 +16,18 @@ the button for a second then other modes can be selected.
 
 
 FILES IN THE DISTRIBUTION
-=========================
+-------------------------
+
 Readme.txt ........ The file you are currently reading.
+circuit/ .......... Diagrams of the circuit.
 firmware .......... Source code of the controller firmware.
 firmware/usbdrv ... USB driver -- See Readme.txt in that directory for info
 License.txt ....... Public license (GPL2) for all contents of this project.
 Changelog.txt ..... Logfile documenting changes in firm- and hardware.
 
 
-BUILDING AND INSTALLING
-=======================
+COMPILING AND INSTALLING
+------------------------
 
 This project can be built on Unix (GNU/Linux, FreeBSD or Mac OS X) or Windows
 although no testing has been done on any platform except GNU/Linux.
@@ -53,7 +56,7 @@ should set the fuses with "make fuse".
 
 
 MODES OF OPERATION
-==================
+------------------
 
 At power on the system enters mode 1:
 
@@ -83,7 +86,7 @@ source code (or contact author) for more information.
 
 
 HARDWARE
-========
+--------
 
 RFStompbox is a member of a family of simple platforms contructed from
 Atmel's ATTiny85 microcontrollers. All family members share the same USB
@@ -103,11 +106,22 @@ meeting the USB electrical specification but is close enough to work with
 almost all USB hosts. It also uses the USB host clock to callibrate the
 ATTiny's internal oscillator eliminating the need for an external crystal.
 
+Two diagrams of the circuit are supplied. The first, rfstompbox.pdf, shows
+the full circuit complete with the ICSP port to allow the firmware to be
+updated. The second is functionally equivalent but does not include the
+ICSP port meaning that the the microprocessor must be removed from the
+circuit for firmware updates.
+
+Note: The striped down circuit has a deliberately inefficient design
+      (in terms of board space, redundant cut tracks and the use a wire
+      where a jumper could be used instead) in order to allow an ICSP
+      header to be retrofitted to an existing build.
+
 The result is a very cheap circuit to build. Have fun.
 
 
 MORE INFORMATION
-================
+----------------
 
 RFStompbox was written by Daniel Thompson using driver software and
 example code from Objective Development. For other projects by the same
@@ -122,8 +136,3 @@ for Atmel's AVR microcontrollers please visit the URL
 
 A technical documentation of the driver's interface can be found in the
 file "firmware/usbdrv/usbdrv.h".
-
-
---
-(c) 2011 by Daniel Thompson
-(c) 2007 by OBJECTIVE DEVELOPMENT Software GmbH.
