@@ -245,24 +245,22 @@ enum {
 	KEYBOARD_SPACE = 44,
 };
 
+static PROGMEM struct state stateTable[] = {
 #define UP(x) (0x80 | (x))
 #define DN(x) (x)
-static PROGMEM struct state stateTable[] = {
-#if 1
-	[  0] = { DN(1),   0,   1, KEYBOARD_NO_EVENT },
-	[  1] = { DN(2),   0,   0, KEYBOARD_SPACE },
-	[  2] = { UP(1), 100,   3, KEYBOARD_NO_EVENT },
-	[  3] = { DN(4),   0,   0, KEYBOARD_RETURN },
-	[  4] = { UP(3), 100,   1, KEYBOARD_NO_EVENT },
-#else
-	[  0] = {   1,   0,   1, 0 },
-	[  1] = {   2,   0,   0, 0x2c },
-	[  2] = {   3,  40,   1, 0x2c },
-	[  3] = {   0,   0,   4,   30 },
-	[  4] = {   5,   0,   0, 0x2c },
-	[  5] = {   6,  40,   4, 0x2c },
-	[  6] = {   0,   0,   1,   31 },
-#endif
+	[  0] = { DN(  1),   0,   1, KEYBOARD_NO_EVENT },
+	[  1] = { DN(  2),   0,   0, KEYBOARD_SPACE },
+	[  2] = { UP(  1), 100,   3, KEYBOARD_NO_EVENT },
+	[  3] = { DN(  4),   0,   0, KEYBOARD_RETURN },
+	[  4] = { UP(  5), 100,   1, KEYBOARD_NO_EVENT },
+	[  5] = { DN(  6),  40,   3, KEYBOARD_RETURN },
+	[  6] = { UP(  7), 100,   1, KEYBOARD_1 },
+	[  7] = { DN(  8),   0,   0, KEYBOARD_RETURN },
+	[  8] = { UP(  9), 100,   1, KEYBOARD_NO_EVENT },
+	[  9] = { DN( 10),  40,   7, KEYBOARD_RETURN },
+	[ 10] = { UP(  3), 100,   1, KEYBOARD_2 },
+#undef UP
+#undef DN
 };
 
 static union { struct state current; uint32_t raw; } state;
