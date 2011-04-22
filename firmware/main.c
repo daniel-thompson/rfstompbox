@@ -4,7 +4,7 @@
  * Main functions for RFStompbox, a firmware for a USB guitar pedal based
  * on vusb.
  *
- * Copyright (C) 2010 Daniel Thompson <daniel@redfelineninja.org.uk> 
+ * Copyright (C) 2011 Daniel Thompson <daniel@redfelineninja.org.uk> 
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
