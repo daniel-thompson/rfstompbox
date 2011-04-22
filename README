@@ -129,10 +129,16 @@ author see:
 
     http://www.redfelineninja.org.uk/
 
+Flip van den Berg's 1-key keyboard source code was used as "scaffolding"
+whilst developing the firmware for RFStompbox although none of his code
+still appears in the final release.
+
+    http://blog.flipwork.nl/?x=entry:entry081009-142605
+
 For more information about Objective Development's firmware-only USB driver
 for Atmel's AVR microcontrollers please visit the URL
 
-    http://www.obdev.at/products/avrusb/
+    http://www.obdev.at/products/vusb/
 
 A technical documentation of the driver's interface can be found in the
 file "firmware/usbdrv/usbdrv.h".
