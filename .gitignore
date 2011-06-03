@@ -3,3 +3,4 @@ firmware/*.o
 firmware/usbdrv/*.o
 firmware/main.bin
 firmware/main.hex
+firmware/main.eep.hex

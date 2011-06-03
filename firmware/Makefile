@@ -39,6 +39,9 @@ all:	main.hex
 flash:	all
 	$(AVRDUDE) -U flash:w:main.hex:i
 
+eeprom: all
+	$(AVRDUDE) -U eeprom:w:main.eep.hex:i
+
 
 # Fuse high byte:
 # 0xdd = 1 1 0 1   1 1 0 1
@@ -74,6 +77,7 @@ main.bin:	$(OBJECTS)
 main.hex:	main.bin
 	rm -f main.hex main.eep.hex
 	avr-objcopy -j .text -j .data -O ihex main.bin main.hex
+	avr-objcopy -j .eeprom -O ihex main.bin main.eep.hex
 	./checksize main.bin 4096 256
 # do the checksize script as our last action to allow successful compilation
 # on Windows with WinAVR where the Unix commands will fail.

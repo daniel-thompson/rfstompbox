@@ -26,6 +26,8 @@
 
 #include "osccal.h"
 
+#define lengthof(x) (sizeof(x) / sizeof(x[0]))
+
 /* ------------------------------------------------------------------------- */
 
 #define BUTTON_PORT PORTB       /* PORTx - register for button output */
@@ -49,6 +51,67 @@ static uchar    idleRate;           /* in 4 ms units */
 static uchar    buttonState;		/*  stores state of button */
 static uchar    buttonStateChanged;     /*  indicates edge detect on button */
 
+/* The following variables store the status of the current data transfer */
+static uchar    currentAddress;
+static uchar    bytesRemaining;
+
+/* ------------------------------------------------------------------------- */
+
+struct state {
+	uchar next_state;
+	uchar timeout;
+	uchar timeout_state;
+	uchar scancode;
+};
+
+enum {
+	KEYBOARD_NO_EVENT = 0,
+
+	KEYBOARD_1 = 30,
+	KEYBOARD_2,
+	KEYBOARD_3,
+	KEYBOARD_4,
+	KEYBOARD_5,
+	KEYBOARD_6,
+	KEYBOARD_7,
+	KEYBOARD_8,
+	KEYBOARD_9,
+	KEYBOARD_0,
+
+	KEYBOARD_RETURN = 40,
+
+	KEYBOARD_SPACE = 44,
+};
+
+static const EEMEM struct {
+    uchar storedCalibration;
+    uchar diagnosticReport[7];
+    struct state stateTable[96]; /* reduce to 62 for ATTiny45 */
+} eeprom = {
+    .storedCalibration = 0xff,
+    .stateTable = {
+#define UP(x) (0x80 | (x))
+#define DN(x) (x)
+	[  0] = { DN(  0),   0,   1, KEYBOARD_NO_EVENT },
+	[  1] = { DN(  2),   0,   0, KEYBOARD_SPACE },
+	[  2] = { UP(  1), 100,   3, KEYBOARD_NO_EVENT },
+	[  3] = { DN(  4),   0,   0, KEYBOARD_RETURN },
+	[  4] = { UP(  5), 100,   1, KEYBOARD_NO_EVENT },
+	[  5] = { DN(  6),  40,   3, KEYBOARD_RETURN },
+	[  6] = { UP(  7), 100,   1, KEYBOARD_1 },
+	[  7] = { DN(  8),   0,   0, KEYBOARD_RETURN },
+	[  8] = { UP(  9), 100,   1, KEYBOARD_NO_EVENT },
+	[  9] = { DN( 10),  40,   7, KEYBOARD_RETURN },
+	[ 10] = { UP(  3), 100,   1, KEYBOARD_2 },
+#undef UP
+#undef DN
+    },
+};
+
+#define EEPROM_CALIBRATION ((void *) (&eeprom.storedCalibration))
+#define EEPROM_DIAGNOSTIC(x) ((unsigned) (&eeprom.diagnosticReport[x]))
+#define EEPROM_STATE(x) ((void *) (&eeprom.stateTable[x]))
+
 /* ------------------------------------------------------------------------- */
 
 PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /* USB report descriptor */
@@ -69,6 +132,18 @@ PROGMEM char usbHidReportDescriptor[USB_CFG_HID_REPORT_DESCRIPTOR_LENGTH] = { /*
     0x19, 0x00,                    //   USAGE_MINIMUM (Reserved (no event indicated))
     0x29, 0x65,                    //   USAGE_MAXIMUM (Keyboard Application)
     0x81, 0x00,                    //   INPUT (Data,Ary,Abs)
+    0xc0,                          // END_COLLECTION
+
+    0x06, 0x00, 0xff,              // USAGE_PAGE (Generic Desktop)
+    0x09, 0x01,                    // USAGE (Vendor Usage 1)
+    0xa1, 0x01,                    // COLLECTION (Application)
+    0x85, 0x01,                    //   REPORT_ID(1)
+    0x15, 0x00,                    //   LOGICAL_MINIMUM (0)
+    0x26, 0xff, 0x00,              //   LOGICAL_MAXIMUM (255)
+    0x75, 0x08,                    //   REPORT_SIZE (8)
+    0x95, 0x80,                    //   REPORT_COUNT (128)
+    0x09, 0x00,                    //   USAGE (Undefined)
+    0xb2, 0x02, 0x01,              //   FEATURE (Data,Var,Abs,Buf)
     0xc0                           // END_COLLECTION
 };
 /* We use a simplifed keyboard report descriptor which does not support the
@@ -219,100 +294,59 @@ static void buttonPoll(void)
 
 /* ------------------------------------------------------------------------- */
 
-struct state {
-	uchar next_state;
-	uchar timeout;
-	uchar timeout_state;
-	uchar scancode;
-};
-
-enum {
-	KEYBOARD_NO_EVENT = 0,
-
-	KEYBOARD_1 = 30,
-	KEYBOARD_2,
-	KEYBOARD_3,
-	KEYBOARD_4,
-	KEYBOARD_5,
-	KEYBOARD_6,
-	KEYBOARD_7,
-	KEYBOARD_8,
-	KEYBOARD_9,
-	KEYBOARD_0,
-
-	KEYBOARD_RETURN = 40,
-
-	KEYBOARD_SPACE = 44,
-};
-
-static PROGMEM struct state stateTable[] = {
-#define UP(x) (0x80 | (x))
-#define DN(x) (x)
-	[  0] = { DN(  1),   0,   1, KEYBOARD_NO_EVENT },
-	[  1] = { DN(  2),   0,   0, KEYBOARD_SPACE },
-	[  2] = { UP(  1), 100,   3, KEYBOARD_NO_EVENT },
-	[  3] = { DN(  4),   0,   0, KEYBOARD_RETURN },
-	[  4] = { UP(  5), 100,   1, KEYBOARD_NO_EVENT },
-	[  5] = { DN(  6),  40,   3, KEYBOARD_RETURN },
-	[  6] = { UP(  7), 100,   1, KEYBOARD_1 },
-	[  7] = { DN(  8),   0,   0, KEYBOARD_RETURN },
-	[  8] = { UP(  9), 100,   1, KEYBOARD_NO_EVENT },
-	[  9] = { DN( 10),  40,   7, KEYBOARD_RETURN },
-	[ 10] = { UP(  3), 100,   1, KEYBOARD_2 },
-#undef UP
-#undef DN
-};
-
-static union { struct state current; uint32_t raw; } state;
 static uchar stateWaitForButton;
 static uchar stateTimeout;
+static struct state state;
 
 static void stateMachineSwitchTo(uchar stateId)
 {
-	state.raw = pgm_read_dword(stateTable + stateId);
+	/* automatic reset on state machine overflow */
+	if (stateId > lengthof(eeprom.stateTable))
+		stateId = 0;
+
+        eeprom_read_block(&state, EEPROM_STATE(stateId), sizeof(state));
 
 	/* handle transient states early */
-	while (0 == state.current.next_state &&
-	       0 == state.current.timeout) {
-		scanqAppend(state.current.scancode);
+	while (0 == state.next_state &&
+	       0 == state.timeout) {
+		scanqAppend(state.scancode);
 
-		state.raw = pgm_read_dword(stateTable + state.current.timeout_state);
+		eeprom_read_block(&state, EEPROM_STATE(state.timeout_state), sizeof(state));
         }
 
 	/* figure out what button state we are waiting for (and clear the marker bit) */
-	stateWaitForButton = !(state.current.next_state & _BV(7));
-	state.current.next_state &= ~_BV(7);
+	stateWaitForButton = !(state.next_state & _BV(7));
+	state.next_state &= ~_BV(7);
 
 	/* calculate the timeout action (this may be a nop) */
-	stateTimeout = clockHundredths + state.current.timeout;
-
+	stateTimeout = clockHundredths + state.timeout;
 }
 
 static void stateMachineInit(void)
 {
-	stateMachineSwitchTo(1);
+	stateMachineSwitchTo(0);
 }
 
 static void stateMachinePoll(void)
 {
 	/* check for timeout first */
-	if (state.current.timeout &&
+	if (state.timeout &&
 	    timeAfter(clockHundredths, stateTimeout)) {
-		if (0 == state.current.next_state &&
-		    0 != state.current.scancode)
-			scanqAppend(state.current.scancode);
+		if (0 == state.next_state &&
+		    0 != state.scancode)
+			scanqAppend(state.scancode);
 
-		stateMachineSwitchTo(state.current.timeout_state);
+		stateMachineSwitchTo(state.timeout_state);
 	}
 
 	/* check for state change due to button */
 	if (buttonStateChanged &&
-	    0 != state.current.next_state &&
+	    0 != state.next_state &&
 	    (buttonState == stateWaitForButton)) {
-		if (0 != state.current.scancode)
-			scanqAppend(state.current.scancode);
+		if (0 != state.scancode)
+			scanqAppend(state.scancode);
 	
-		stateMachineSwitchTo(state.current.next_state);
+		stateMachineSwitchTo(state.next_state);
 	}
 	buttonStateChanged = 0;
 
@@ -337,16 +371,93 @@ static void testPoll(void)
 /* ------------------------ interface to USB driver ------------------------ */
 /* -------------------------------------------------------------------------------- */
 
+static uchar usbGetReportByte(uchar offset) {
+    if (offset == EEPROM_DIAGNOSTIC(0))
+	return OSCCAL;
+
+    if (offset == EEPROM_DIAGNOSTIC(1))
+	return stateWaitForButton;
+
+    if (offset == EEPROM_DIAGNOSTIC(2))
+	return 0; // unused
+
+    if (offset >= EEPROM_DIAGNOSTIC(3) && offset <= EEPROM_DIAGNOSTIC(7))
+	return ((uchar *) (&state))[offset - EEPROM_DIAGNOSTIC(3)];
+
+    return eeprom_read_byte((uchar *)0 + offset);
+}
+
+/* usbFunctionRead() is called when the host requests a chunk of data from
+ * the device. For more information see the documentation in usbdrv/usbdrv.h.
+ */
+uchar usbFunctionRead(uchar *data, uchar len)
+{
+    uchar i;
+
+    if(len > bytesRemaining)
+        len = bytesRemaining;
+
+    for (i=0; i<len; i++, currentAddress++)
+	    data[i] = usbGetReportByte(currentAddress);
+    bytesRemaining -= len;
+	 
+    return len;
+}
+/* usbFunctionWrite() is called when the host sends a chunk of data to the
+ * device. For more information see the documentation in usbdrv/usbdrv.h.
+ */
+uchar   usbFunctionWrite(uchar *data, uchar len)
+{
+    if(bytesRemaining == 0)
+        return 1; /* end of transfer */
+
+    if(len > bytesRemaining)
+        len = bytesRemaining;
+
+    /* handle the nop and RAM based addresses */
+    while (len != 0 &&
+           currentAddress <= EEPROM_DIAGNOSTIC(7)) {
+        /* most addresses in this range are ignored (write is not allowed to those) */
+
+	/* no RAM based addresses at present */
+
+        data++;
+	len--;
+	currentAddress++;
+	bytesRemaining--;    
+    }
+
+    /* lazily program the EEPROM based addresses */
+    if (len != 0) {
+	eeprom_update_block(data, (uchar *)0 + currentAddress, len);
+
+	currentAddress += len;
+	bytesRemaining -= len;
+    }
+
+    /* return 1 if this was the last chunk */
+    return bytesRemaining == 0;
+}
+
 uchar	usbFunctionSetup(uchar data[8])
 {
 usbRequest_t    *rq = (void *)data;
 
-    usbMsgPtr = reportBuffer;
     if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS){    /* class request type */
         if(rq->bRequest == USBRQ_HID_GET_REPORT){  /* wValue: ReportType (highbyte), ReportID (lowbyte) */
-            /* we only have one report type, so don't look at wValue */
-            /* buildReport(); */
-            return sizeof(reportBuffer);
+	    if (rq->wValue.bytes[0] == 1) {
+		bytesRemaining = 128;
+		currentAddress = 0;
+		return USB_NO_MSG; /* use usbFunctionRead() to obtain data */
+	    }
+
+	    usbMsgPtr = reportBuffer;
+	    return sizeof(reportBuffer);
+	} else if (rq->bRequest == USBRQ_HID_SET_REPORT) {
+	    /* since we have only one setable report type, we can ignore the report-ID */
+	    bytesRemaining = 128;
+            currentAddress = 0;
+            return USB_NO_MSG;  /* use usbFunctionWrite() to receive data from host */
         }else if(rq->bRequest == USBRQ_HID_GET_IDLE){
             usbMsgPtr = &idleRate;
             return 1;
@@ -366,8 +477,8 @@ void    hadUsbReset(void)
     sei();
 
     /* store the calibrated value in EEPROM if it has changed */
-    if (eeprom_read_byte(0) != OSCCAL)
-        eeprom_write_byte(0, OSCCAL);
+    if (eeprom_read_byte(EEPROM_CALIBRATION) != OSCCAL)
+        eeprom_write_byte(EEPROM_CALIBRATION, OSCCAL);
 }
 
 /* ------------------------------------------------------------------------- */
@@ -379,7 +490,7 @@ int main(void)
 uchar   i;
 uchar   calibrationValue;
 
-    calibrationValue = eeprom_read_byte(0); /* calibration value from last time */
+    calibrationValue = eeprom_read_byte(EEPROM_CALIBRATION); /* calibration value from last time */
     if(calibrationValue != 0xff){
         OSCCAL = calibrationValue;
     }
