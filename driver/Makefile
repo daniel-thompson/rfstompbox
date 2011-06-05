@@ -11,8 +11,8 @@
 # system:
 
 # Use the following 3 lines on Unix and Mac OS X:
-USBFLAGS=   `libusb-config --cflags`
-USBLIBS=    `libusb-config --libs`
+USBFLAGS=   `pkg-config --cflags libusb`
+USBLIBS=    `pkg-config --libs libusb`
 EXE_SUFFIX=
 
 # Use the following 3 lines on Windows and comment out the 3 above:
