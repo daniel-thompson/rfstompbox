@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include "hiddata.h"
 #include "../firmware/usbconfig.h"  /* for device VID, PID, vendor name and product name */
 
@@ -40,7 +41,7 @@ int             vid = rawVid[0] + 256 * rawVid[1];
 int             pid = rawPid[0] + 256 * rawPid[1];
 int             err;
 
-    if((err = usbhidOpenDevice(&dev, vid, vendorName, pid, productName, 0)) != 0){
+    if((err = usbhidOpenDevice(&dev, vid, vendorName, pid, productName, 1)) != 0){
         fprintf(stderr, "error finding %s: %s\n", productName, usbErrorMessage(err));
         return NULL;
     }
@@ -89,10 +90,43 @@ static void usage(char *myName)
     fprintf(stderr, "  %s write <listofbytes>\n", myName);
 }
 
+typedef struct stompbox_rom {
+	int size;
+	uint8_t raw[512];
+} stompbox_rom_t;
+
+int stompbox_read_rom(usbDevice_t *dev, stompbox_rom_t *rom)
+{
+	const int reportsize = 128;
+
+	int romsize = 512;
+	int report, len, err;
+
+
+	for (report = 1, rom->size = 0;
+	     rom->size < romsize;
+	     report++, rom->size += reportsize) {
+		len = reportsize;
+		err = usbhidGetReport(dev, report,
+				      (char *) (rom->raw + rom->size), &len);
+
+		if (0 != err || reportsize != len) {
+			fprintf(stderr,
+				"Error reading ROM at %d: %s\n",
+				rom->size, (0 != err ? usbErrorMessage(err)
+                                                     : "reply is too short"));
+			return -1;
+		}
+	}
+	
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
 usbDevice_t *dev;
-char        buffer[129];    /* room for dummy report ID */
+stompbox_rom_t rom;
+char        buffer[128];    /* room for dummy report ID */
 int         err;
 
     if(argc < 2){
@@ -103,10 +137,11 @@ int         err;
         exit(1);
     if(strcasecmp(argv[1], "read") == 0){
         int len = sizeof(buffer);
-        if((err = usbhidGetReport(dev, 0, buffer, &len)) != 0){
+        if((err = usbhidGetReport(dev, 1, buffer, &len)) != 0){
             fprintf(stderr, "error reading data: %s\n", usbErrorMessage(err));
         }else{
-            hexdump(buffer + 1, sizeof(buffer) - 1);
+		//hexdump(buffer + 1, sizeof(buffer) - 1);
+		hexdump(buffer, sizeof(buffer));
         }
     }else if(strcasecmp(argv[1], "write") == 0){
         int i, pos;
@@ -116,6 +151,11 @@ int         err;
         }
         if((err = usbhidSetReport(dev, buffer, sizeof(buffer))) != 0)   /* add a dummy report ID */
             fprintf(stderr, "error writing data: %s\n", usbErrorMessage(err));
+    } else if(strcasecmp(argv[1], "dump") == 0) {
+	    err = stompbox_read_rom(dev, &rom);
+	    if (0 == err) {
+		    hexdump(rom.raw, sizeof(rom.raw));
+	    }
     }else{
         usage(argv[0]);
         exit(1);
