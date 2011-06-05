@@ -52,7 +52,7 @@ static uchar    buttonState;		/*  stores state of button */
 static uchar    buttonStateChanged;     /*  indicates edge detect on button */
 
 /* The following variables store the status of the current data transfer */
-static uchar    currentAddress;
+static unsigned currentAddress;
 static uchar    bytesRemaining;
 
 /* ------------------------------------------------------------------------- */
@@ -371,7 +371,7 @@ static void testPoll(void)
 /* ------------------------ interface to USB driver ------------------------ */
 /* -------------------------------------------------------------------------------- */
 
-static uchar usbGetReportByte(uchar offset) {
+static uchar usbGetReportByte(unsigned offset) {
     if (offset == EEPROM_DIAGNOSTIC(0))
 	return OSCCAL;
 
@@ -445,19 +445,22 @@ usbRequest_t    *rq = (void *)data;
 
     if((rq->bmRequestType & USBRQ_TYPE_MASK) == USBRQ_TYPE_CLASS){    /* class request type */
         if(rq->bRequest == USBRQ_HID_GET_REPORT){  /* wValue: ReportType (highbyte), ReportID (lowbyte) */
-	    if (rq->wValue.bytes[0] == 1) {
+  	    if (rq->wValue.bytes[0] >= 1 && rq->wValue.bytes[0] <= 4) {
 		bytesRemaining = 128;
-		currentAddress = 0;
+		currentAddress = (rq->wValue.bytes[0] - 1) * 128;
 		return USB_NO_MSG; /* use usbFunctionRead() to obtain data */
 	    }
 
 	    usbMsgPtr = reportBuffer;
 	    return sizeof(reportBuffer);
 	} else if (rq->bRequest == USBRQ_HID_SET_REPORT) {
-	    /* since we have only one setable report type, we can ignore the report-ID */
-	    bytesRemaining = 128;
-            currentAddress = 0;
-            return USB_NO_MSG;  /* use usbFunctionWrite() to receive data from host */
+  	    if (rq->wValue.bytes[0] >= 1 && rq->wValue.bytes[0] <= 4) {
+		bytesRemaining = 128;
+		currentAddress = (rq->wValue.bytes[0] - 1) * 128;
+		return USB_NO_MSG; /* use usbFunctionRead() to obtain data */
+	    }
+
+	    return 0;
         }else if(rq->bRequest == USBRQ_HID_GET_IDLE){
             usbMsgPtr = &idleRate;
             return 1;
